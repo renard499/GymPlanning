@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Planning Salle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --bg:#121316;
+    --surface:#1B1D22;
+    --surface-2:#24272E;
+    --text:#ECEDF0;
+    --muted:#8B9098;
+    --accent:#C9A24B;
+    --accent-dim:#8A6F2E;
+    --line:#2E3138;
+    --danger:#B8503F;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding-bottom:40px;
+  }
+  h1,h2,h3,.label{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    letter-spacing:0.01em;
+  }
+  header{
+    padding:22px 18px 14px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+  }
+  header h1{
+    font-size:22px;
+    margin:0;
+    color:var(--text);
+  }
+  header h1 span{color:var(--accent);}
+  .edit-toggle{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--muted);
+    font-family:'Inter',sans-serif;
+    font-size:13px;
+    padding:7px 12px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .edit-toggle.active{
+    color:var(--bg);
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  .days-row{
+    display:flex;
+    gap:8px;
+    overflow-x:auto;
+    padding:16px 18px 4px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .days-row::-webkit-scrollbar{display:none;}
+  .day-pill{
+    flex:0 0 auto;
+    padding:9px 16px;
+    border-radius:3px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    color:var(--muted);
+    font-family:'Oswald',sans-serif;
+    font-size:14px;
+    font-weight:500;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .day-pill.active{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#16130A;
+  }
+  .day-pill.add-day{
+    color:var(--accent);
+    border-style:dashed;
+    background:transparent;
+  }
+  main{padding:8px 18px 0;max-width:520px;margin:0 auto;}
+  .day-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:20px 0 12px;
+  }
+  .day-header h2{
+    font-size:19px;
+    margin:0;
+  }
+  .day-header .del-day{
+    background:none;
+    border:none;
+    color:var(--danger);
+    font-size:12px;
+    font-family:'Inter',sans-serif;
+    cursor:pointer;
+    padding:4px 0;
+  }
+  .exercise{
+    background:var(--surface);
+    border-left:3px solid var(--accent-dim);
+    margin-bottom:8px;
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .exercise.done{
+    border-left-color:var(--accent);
+  }
+  .exercise.done .ex-row{opacity:0.55;}
+  .exercise.done .ex-name{text-decoration:line-through;}
+  .ex-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:13px 14px;
+  }
+  .check{
+    width:22px;height:22px;
+    flex:0 0 auto;
+    border-radius:50%;
+    border:2px solid var(--muted);
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .exercise.done .check{
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  .check svg{width:12px;height:12px;display:none;}
+  .exercise.done .check svg{display:block;}
+  .ex-info{flex:1;min-width:0;}
+  .ex-name{font-size:15px;font-weight:500;}
+  .ex-meta{font-size:13px;color:var(--muted);margin-top:2px;}
+  .ex-del{
+    background:none;border:none;color:var(--muted);
+    font-size:18px;cursor:pointer;padding:2px 4px;flex:0 0 auto;
+  }
+  .ex-arrow{
+    background:none;border:none;color:var(--muted);
+    flex:0 0 auto;cursor:pointer;padding:4px;
+    display:flex;align-items:center;justify-content:center;
+    transition:transform 0.18s ease;
+  }
+  .ex-arrow.open{transform:rotate(90deg);color:var(--accent);}
+  .ex-arrow svg{width:16px;height:16px;}
+  .media-panel{
+    padding:0 14px 14px;
+    border-top:1px solid var(--line);
+    margin-top:2px;
+    padding-top:12px;
+  }
+  .media-panel img,
+  .media-panel video{
+    width:100%;
+    max-height:320px;
+    object-fit:cover;
+    border-radius:3px;
+    display:block;
+    background:var(--surface-2);
+  }
+  .media-panel iframe{
+    width:100%;
+    aspect-ratio:16/9;
+    border:none;
+    border-radius:3px;
+    display:block;
+  }
+  .media-empty{
+    font-size:13px;
+    color:var(--muted);
+    padding:6px 0;
+  }
+  .media-edit-row{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+  }
+  .media-edit-row input{
+    flex:1;
+    background:var(--bg);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-size:13px;
+    padding:8px 10px;
+    border-radius:3px;
+  }
+  .media-edit-row input::placeholder{color:var(--muted);}
+  .media-edit-row button{
+    background:var(--accent);
+    color:#16130A;
+    border:none;
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    padding:0 14px;
+    border-radius:3px;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+  .add-exercise-form{
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:12px;
+    margin:10px 0 20px;
+    display:grid;
+    grid-template-columns:1fr 60px 60px;
+    gap:8px;
+  }
+  .add-exercise-form input{
+    background:var(--bg);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-size:14px;
+    padding:9px 10px;
+    border-radius:3px;
+  }
+  .add-exercise-form input#exMedia{
+    grid-column:1/-1;
+  }
+  .add-exercise-form input::placeholder{color:var(--muted);}
+  .add-exercise-form button{
+    grid-column:1/-1;
+    background:var(--accent);
+    color:#16130A;
+    border:none;
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:14px;
+    padding:10px;
+    border-radius:3px;
+    cursor:pointer;
+    margin-top:2px;
+  }
+  .new-day-form{
+    display:flex;
+    gap:8px;
+    padding:0 18px 6px;
+    max-width:520px;
+    margin:0 auto;
+  }
+  .new-day-form input{
+    flex:1;
+    background:var(--surface);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:9px 12px;
+    border-radius:3px;
+    font-size:14px;
+  }
+  .new-day-form button{
+    background:var(--accent);
+    color:#16130A;
+    border:none;
+    padding:0 16px;
+    border-radius:3px;
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .empty{
+    color:var(--muted);
+    font-size:14px;
+    padding:30px 0;
+    text-align:center;
+  }
+  .status-line{
+    padding:14px 18px 0;
+    max-width:520px;
+    margin:0 auto;
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    justify-content:space-between;
+  }
+  .config-banner{
+    display:none;
+    background:#3A2A20;
+    color:#E8C9A0;
+    font-size:13px;
+    padding:12px 18px;
+    border-bottom:1px solid var(--accent-dim);
+    line-height:1.5;
+  }
+  .config-banner code{
+    background:rgba(0,0,0,0.25);
+    padding:1px 5px;
+    border-radius:2px;
+  }
+  .reset-btn{background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;font-family:'Inter',sans-serif;}
+</style>
+</head>
+<body>
+
+<div class="config-banner" id="configBanner">
+  Configuration Firebase manquante : remplace <code>firebaseConfig</code> en haut de la balise <code>&lt;script&gt;</code> par la config de ton propre projet Firebase (gratuit). Sans ça, le plan ne sera pas sauvegardé.
+</div>
+
+<header>
+  <h1>Salle<span>.</span>Planning</h1>
+  <button class="edit-toggle" id="editToggle">Modifier</button>
+</header>
+
+<div class="days-row" id="daysRow"></div>
+<div class="new-day-form" id="newDayForm" style="display:none;">
+  <input type="text" id="newDayName" placeholder="Nom du jour (ex: Push)">
+  <button id="newDayBtn">Ajouter</button>
+</div>
+
+<main id="main"></main>
+
+<div class="status-line">
+  <span id="statusText">Chargement…</span>
+  <button class="reset-btn" id="resetBtn" style="display:none;">réinitialiser les coches du jour</button>
+</div>
+
+<script>
+/* ================================================================
+   1) Va sur https://console.firebase.google.com (gratuit)
+   2) Crée un projet > Build > Realtime Database > "Créer une base
+      de données" > démarre en mode TEST (accès ouvert, suffisant
+      pour un usage entre potes ; resserre les règles si besoin).
+   3) Project settings > tes applis > "</> Web" > copie la config
+      ci-dessous et colle-la à la place de celle-ci.
+   ================================================================ */
+const firebaseConfig = {
+  apiKey: "REPLACE_ME",
+  authDomain: "REPLACE_ME.firebaseapp.com",
+  databaseURL: "https://REPLACE_ME-default-rtdb.firebaseio.com",
+  projectId: "REPLACE_ME",
+  storageBucket: "REPLACE_ME.appspot.com",
+  messagingSenderId: "REPLACE_ME",
+  appId: "REPLACE_ME"
+};
+
+const isConfigured = firebaseConfig.apiKey !== "REPLACE_ME";
+let db = null;
+if(isConfigured){
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+}else{
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.getElementById('configBanner').style.display = 'block';
+  });
+}
+
+function getDeviceId(){
+  let id = localStorage.getItem('salle-planner-device-id');
+  if(!id){
+    id = Math.random().toString(36).slice(2,10);
+    localStorage.setItem('salle-planner-device-id', id);
+  }
+  return id;
+}
+const deviceId = getDeviceId();
+
+let editMode = false;
+let activeDay = null;
+let plan = null; // { days: [{id,name,exercises:[{id,name,sets,reps,media}]}] }
+let progress = {}; // { exerciseId: true }
+let expanded = new Set(); // exercise ids with the media panel open
+
+const today = new Date().toISOString().slice(0,10);
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+function defaultPlan(){
+  return {
+    days: [
+      { id: uid(), name:"Push", exercises:[
+        {id:uid(), name:"Développé couché", sets:4, reps:8},
+        {id:uid(), name:"Développé militaire", sets:3, reps:10},
+        {id:uid(), name:"Dips", sets:3, reps:12},
+      ]},
+      { id: uid(), name:"Pull", exercises:[
+        {id:uid(), name:"Tractions", sets:4, reps:8},
+        {id:uid(), name:"Rowing barre", sets:4, reps:10},
+        {id:uid(), name:"Curl haltères", sets:3, reps:12},
+      ]},
+      { id: uid(), name:"Legs", exercises:[
+        {id:uid(), name:"Squat", sets:4, reps:8},
+        {id:uid(), name:"Presse à cuisses", sets:3, reps:12},
+        {id:uid(), name:"Mollets debout", sets:4, reps:15},
+      ]},
+    ]
+  };
+}
+
+function loadPlan(){
+  // Résout une fois la première valeur reçue, puis continue d'écouter
+  // les changements en direct pour que tous les appareils restent à jour.
+  return new Promise((resolve)=>{
+    if(!isConfigured){
+      plan = defaultPlan();
+      resolve();
+      return;
+    }
+    let first = true;
+    db.ref('plan').on('value', (snapshot)=>{
+      const val = snapshot.val();
+      if(val){
+        plan = val;
+      }else if(first){
+        plan = defaultPlan();
+        savePlan();
+      }
+      if(first){ first = false; resolve(); }
+      else{
+        // mise à jour venue d'un autre appareil : on garde le jour actif si possible
+        if(!plan.days.find(d=>d.id===activeDay)){
+          activeDay = plan.days.length ? plan.days[0].id : null;
+        }
+        render();
+      }
+    }, ()=>{
+      plan = defaultPlan();
+      setStatus("Connexion Firebase impossible — vérifie firebaseConfig.");
+      if(first){ first = false; resolve(); }
+    });
+  });
+}
+
+async function savePlan(){
+  if(!isConfigured) return;
+  try{
+    await db.ref('plan').set(plan);
+  }catch(e){
+    setStatus("Erreur de sauvegarde du plan.");
+  }
+}
+
+async function loadProgress(){
+  if(!isConfigured){ progress = {}; return; }
+  try{
+    const snap = await db.ref(`progress/${today}/${deviceId}`).once('value');
+    progress = snap.val() || {};
+  }catch(e){
+    progress = {};
+  }
+}
+
+async function saveProgress(){
+  if(!isConfigured) return;
+  try{
+    await db.ref(`progress/${today}/${deviceId}`).set(progress);
+  }catch(e){}
+}
+
+function setStatus(text){
+  document.getElementById('statusText').textContent = text;
+}
+
+function renderDays(){
+  const row = document.getElementById('daysRow');
+  row.innerHTML = "";
+  plan.days.forEach(day=>{
+    const pill = document.createElement('button');
+    pill.className = 'day-pill' + (day.id===activeDay ? ' active':'');
+    pill.textContent = day.name;
+    pill.onclick = ()=>{ activeDay = day.id; render(); };
+    row.appendChild(pill);
+  });
+  if(editMode){
+    const addPill = document.createElement('button');
+    addPill.className = 'day-pill add-day';
+    addPill.textContent = '+ Jour';
+    addPill.onclick = ()=>{
+      const form = document.getElementById('newDayForm');
+      form.style.display = form.style.display==='none' ? 'flex':'none';
+    };
+    row.appendChild(addPill);
+  }
+}
+
+function renderMain(){
+  const main = document.getElementById('main');
+  main.innerHTML = "";
+  if(!plan.days.length){
+    main.innerHTML = '<p class="empty">Aucun jour pour l’instant. Passe en mode Modifier pour en créer un.</p>';
+    return;
+  }
+  const day = plan.days.find(d=>d.id===activeDay) || plan.days[0];
+  activeDay = day.id;
+
+  const dh = document.createElement('div');
+  dh.className = 'day-header';
+  dh.innerHTML = `<h2>${escapeHtml(day.name)}</h2>`;
+  if(editMode){
+    const del = document.createElement('button');
+    del.className = 'del-day';
+    del.textContent = 'supprimer ce jour';
+    del.onclick = async ()=>{
+      plan.days = plan.days.filter(d=>d.id!==day.id);
+      activeDay = plan.days.length ? plan.days[0].id : null;
+      await savePlan();
+      render();
+    };
+    dh.appendChild(del);
+  }
+  main.appendChild(dh);
+
+  if(!day.exercises.length){
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = 'Pas encore d’exercice sur ce jour.';
+    main.appendChild(p);
+  }
+
+  day.exercises.forEach(ex=>{
+    const done = !!progress[ex.id];
+    const isOpen = expanded.has(ex.id);
+    const card = document.createElement('div');
+    card.className = 'exercise' + (done ? ' done':'');
+
+    const row = document.createElement('div');
+    row.className = 'ex-row';
+    row.innerHTML = `
+      <div class="check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#16130A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div class="ex-info">
+        <div class="ex-name">${escapeHtml(ex.name)}</div>
+        <div class="ex-meta">${ex.sets} séries × ${ex.reps} reps</div>
+      </div>
+      <button class="ex-arrow${isOpen ? ' open':''}" aria-label="Voir la démo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </button>
+    `;
+    row.querySelector('.check').onclick = async ()=>{
+      if(progress[ex.id]) delete progress[ex.id];
+      else progress[ex.id] = true;
+      await saveProgress();
+      render();
+    };
+    row.querySelector('.ex-arrow').onclick = ()=>{
+      if(expanded.has(ex.id)) expanded.delete(ex.id);
+      else expanded.add(ex.id);
+      render();
+    };
+    if(editMode){
+      const del = document.createElement('button');
+      del.className = 'ex-del';
+      del.textContent = '✕';
+      del.onclick = async ()=>{
+        day.exercises = day.exercises.filter(e=>e.id!==ex.id);
+        expanded.delete(ex.id);
+        await savePlan();
+        render();
+      };
+      row.appendChild(del);
+    }
+    card.appendChild(row);
+
+    if(isOpen){
+      const panel = document.createElement('div');
+      panel.className = 'media-panel';
+      panel.appendChild(renderMedia(ex.media));
+      if(editMode){
+        const editRow = document.createElement('div');
+        editRow.className = 'media-edit-row';
+        editRow.innerHTML = `
+          <input type="text" placeholder="Lien photo ou vidéo (jpg, mp4, YouTube…)" value="${ex.media ? escapeHtml(ex.media) : ''}">
+          <button>OK</button>
+        `;
+        editRow.querySelector('button').onclick = async ()=>{
+          const val = editRow.querySelector('input').value.trim();
+          ex.media = val;
+          await savePlan();
+          render();
+        };
+        panel.appendChild(editRow);
+      }
+      card.appendChild(panel);
+    }
+    main.appendChild(card);
+  });
+
+  if(editMode){
+    const form = document.createElement('div');
+    form.className = 'add-exercise-form';
+    form.innerHTML = `
+      <input type="text" placeholder="Exercice" id="exName">
+      <input type="number" placeholder="Séries" id="exSets" min="1">
+      <input type="number" placeholder="Reps" id="exReps" min="1">
+      <input type="text" placeholder="Lien photo/vidéo (optionnel)" id="exMedia">
+      <button id="addExBtn">Ajouter l'exercice</button>
+    `;
+    main.appendChild(form);
+    form.querySelector('#addExBtn').onclick = async ()=>{
+      const name = form.querySelector('#exName').value.trim();
+      const sets = parseInt(form.querySelector('#exSets').value) || 3;
+      const reps = parseInt(form.querySelector('#exReps').value) || 10;
+      const media = form.querySelector('#exMedia').value.trim();
+      if(!name) return;
+      day.exercises.push({id:uid(), name, sets, reps, media});
+      await savePlan();
+      form.querySelector('#exName').value='';
+      form.querySelector('#exSets').value='';
+      form.querySelector('#exReps').value='';
+      form.querySelector('#exMedia').value='';
+      render();
+    };
+  }
+}
+
+function renderMedia(url){
+  if(!url){
+    const p = document.createElement('p');
+    p.className = 'media-empty';
+    p.textContent = 'Aucune démo pour cet exercice pour l’instant.';
+    return p;
+  }
+  const clean = url.trim();
+  const yt = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{6,})/);
+  const vimeo = clean.match(/vimeo\.com\/(\d+)/);
+  if(yt){
+    const f = document.createElement('iframe');
+    f.src = `https://www.youtube.com/embed/${yt[1]}`;
+    f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+    f.allowFullscreen = true;
+    return f;
+  }
+  if(vimeo){
+    const f = document.createElement('iframe');
+    f.src = `https://player.vimeo.com/video/${vimeo[1]}`;
+    f.allow = 'autoplay; fullscreen; picture-in-picture';
+    f.allowFullscreen = true;
+    return f;
+  }
+  if(/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(clean)){
+    const v = document.createElement('video');
+    v.src = clean;
+    v.controls = true;
+    v.playsInline = true;
+    return v;
+  }
+  const img = document.createElement('img');
+  img.src = clean;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.onerror = ()=>{ img.replaceWith(renderMedia(null)); };
+  return img;
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function render(){
+  renderDays();
+  renderMain();
+  document.getElementById('resetBtn').style.display =
+    Object.keys(progress).length ? 'inline' : 'none';
+}
+
+document.getElementById('editToggle').onclick = ()=>{
+  editMode = !editMode;
+  document.getElementById('editToggle').classList.toggle('active', editMode);
+  document.getElementById('editToggle').textContent = editMode ? 'Terminer' : 'Modifier';
+  if(!editMode) document.getElementById('newDayForm').style.display='none';
+  render();
+};
+
+document.getElementById('newDayBtn').onclick = async ()=>{
+  const input = document.getElementById('newDayName');
+  const name = input.value.trim();
+  if(!name) return;
+  const newDay = {id:uid(), name, exercises:[]};
+  plan.days.push(newDay);
+  activeDay = newDay.id;
+  await savePlan();
+  input.value='';
+  document.getElementById('newDayForm').style.display='none';
+  render();
+};
+
+document.getElementById('resetBtn').onclick = async ()=>{
+  progress = {};
+  await saveProgress();
+  render();
+};
+
+(async function init(){
+  setStatus("Chargement…");
+  await loadPlan();
+  await loadProgress();
+  activeDay = plan.days.length ? plan.days[0].id : null;
+  render();
+  setStatus(isConfigured ? "Synchronisé · coches propres à cet appareil" : "Mode local (Firebase non configuré)");
+})();
+</script>
+</body>
+</html>
