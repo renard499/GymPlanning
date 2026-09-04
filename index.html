@@ -412,18 +412,18 @@ function loadPlan(){
     db.ref('plan').on('value', (snapshot)=>{
       let val = snapshot.val();
       if(val){
-        // --- CORRECTION DU BUG FIREBASE ---
-        // Firebase supprime automatiquement les tableaux vides. 
-        // On s'assure donc que "days" et "exercises" soient recréés s'ils sont manquants.
-        if (!val.days) {
-            val.days = [];
-        }
+        // --- NETTOYAGE ROBUSTE DES DONNÉES FIREBASE ---
+        if (!val.days) val.days = [];
+        
+        // Convertit les objets en tableaux purs et retire les valeurs nulles
+        val.days = Object.values(val.days).filter(day => day !== null);
+        
         val.days.forEach(day => {
-            if (!day.exercises) {
-                day.exercises = [];
-            }
+            if (!day.exercises) day.exercises = [];
+            // Fait la même chose pour les exercices de chaque jour
+            day.exercises = Object.values(day.exercises).filter(ex => ex !== null);
         });
-        // -----------------------------------
+        // ----------------------------------------------
         plan = val;
       }else if(first){
         plan = defaultPlan();
@@ -507,11 +507,6 @@ function renderMain(){
   const day = plan.days.find(d=>d.id===activeDay) || plan.days[0];
   activeDay = day.id;
 
-  // Sécurité additionnelle au cas où
-  if (!day.exercises) {
-      day.exercises = [];
-  }
-
   const dh = document.createElement('div');
   dh.className = 'day-header';
   dh.innerHTML = `<h2>${escapeHtml(day.name)}</h2>`;
@@ -529,81 +524,83 @@ function renderMain(){
   }
   main.appendChild(dh);
 
-  if(!day.exercises.length){
+  if(!day.exercises || !day.exercises.length){
     const p = document.createElement('p');
     p.className = 'empty';
     p.textContent = 'Pas encore d’exercice sur ce jour.';
     main.appendChild(p);
-  }
+    // On doit utiliser un return explicite ici pour ne pas chercher à mapper des exercices inexistants 
+    // ou afficher le formulaire deux fois si l'on est pas en edit mode
+  } else {
+    day.exercises.forEach(ex=>{
+      const done = !!progress[ex.id];
+      const isOpen = expanded.has(ex.id);
+      const card = document.createElement('div');
+      card.className = 'exercise' + (done ? ' done':'');
 
-  day.exercises.forEach(ex=>{
-    const done = !!progress[ex.id];
-    const isOpen = expanded.has(ex.id);
-    const card = document.createElement('div');
-    card.className = 'exercise' + (done ? ' done':'');
-
-    const row = document.createElement('div');
-    row.className = 'ex-row';
-    row.innerHTML = `
-      <div class="check">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#16130A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-      </div>
-      <div class="ex-info">
-        <div class="ex-name">${escapeHtml(ex.name)}</div>
-        <div class="ex-meta">${ex.sets} séries × ${ex.reps} reps</div>
-      </div>
-      <button class="ex-arrow${isOpen ? ' open':''}" aria-label="Voir la démo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
-      </button>
-    `;
-    row.querySelector('.check').onclick = async ()=>{
-      if(progress[ex.id]) delete progress[ex.id];
-      else progress[ex.id] = true;
-      await saveProgress();
-      render();
-    };
-    row.querySelector('.ex-arrow').onclick = ()=>{
-      if(expanded.has(ex.id)) expanded.delete(ex.id);
-      else expanded.add(ex.id);
-      render();
-    };
-    if(editMode){
-      const del = document.createElement('button');
-      del.className = 'ex-del';
-      del.textContent = '✕';
-      del.onclick = async ()=>{
-        day.exercises = day.exercises.filter(e=>e.id!==ex.id);
-        expanded.delete(ex.id);
-        await savePlan();
+      const row = document.createElement('div');
+      row.className = 'ex-row';
+      row.innerHTML = `
+        <div class="check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#16130A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </div>
+        <div class="ex-info">
+          <div class="ex-name">${escapeHtml(ex.name)}</div>
+          <div class="ex-meta">${ex.sets} séries × ${ex.reps} reps</div>
+        </div>
+        <button class="ex-arrow${isOpen ? ' open':''}" aria-label="Voir la démo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+        </button>
+      `;
+      row.querySelector('.check').onclick = async ()=>{
+        if(progress[ex.id]) delete progress[ex.id];
+        else progress[ex.id] = true;
+        await saveProgress();
         render();
       };
-      row.appendChild(del);
-    }
-    card.appendChild(row);
-
-    if(isOpen){
-      const panel = document.createElement('div');
-      panel.className = 'media-panel';
-      panel.appendChild(renderMedia(ex.media));
+      row.querySelector('.ex-arrow').onclick = ()=>{
+        if(expanded.has(ex.id)) expanded.delete(ex.id);
+        else expanded.add(ex.id);
+        render();
+      };
       if(editMode){
-        const editRow = document.createElement('div');
-        editRow.className = 'media-edit-row';
-        editRow.innerHTML = `
-          <input type="text" placeholder="Lien photo ou vidéo (jpg, mp4, YouTube…)" value="${ex.media ? escapeHtml(ex.media) : ''}">
-          <button>OK</button>
-        `;
-        editRow.querySelector('button').onclick = async ()=>{
-          const val = editRow.querySelector('input').value.trim();
-          ex.media = val;
+        const del = document.createElement('button');
+        del.className = 'ex-del';
+        del.textContent = '✕';
+        del.onclick = async ()=>{
+          day.exercises = day.exercises.filter(e=>e.id!==ex.id);
+          expanded.delete(ex.id);
           await savePlan();
           render();
         };
-        panel.appendChild(editRow);
+        row.appendChild(del);
       }
-      card.appendChild(panel);
-    }
-    main.appendChild(card);
-  });
+      card.appendChild(row);
+
+      if(isOpen){
+        const panel = document.createElement('div');
+        panel.className = 'media-panel';
+        panel.appendChild(renderMedia(ex.media));
+        if(editMode){
+          const editRow = document.createElement('div');
+          editRow.className = 'media-edit-row';
+          editRow.innerHTML = `
+            <input type="text" placeholder="Lien photo ou vidéo (jpg, mp4, YouTube…)" value="${ex.media ? escapeHtml(ex.media) : ''}">
+            <button>OK</button>
+          `;
+          editRow.querySelector('button').onclick = async ()=>{
+            const val = editRow.querySelector('input').value.trim();
+            ex.media = val;
+            await savePlan();
+            render();
+          };
+          panel.appendChild(editRow);
+        }
+        card.appendChild(panel);
+      }
+      main.appendChild(card);
+    });
+  }
 
   if(editMode){
     const form = document.createElement('div');
@@ -622,6 +619,7 @@ function renderMain(){
       const reps = parseInt(form.querySelector('#exReps').value) || 10;
       const media = form.querySelector('#exMedia').value.trim();
       if(!name) return;
+      if (!day.exercises) day.exercises = [];
       day.exercises.push({id:uid(), name, sets, reps, media});
       await savePlan();
       form.querySelector('#exName').value='';
