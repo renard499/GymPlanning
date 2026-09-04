@@ -337,14 +337,6 @@
 </div>
 
 <script>
-/* ================================================================
-   1) Va sur https://console.firebase.google.com (gratuit)
-   2) Crée un projet > Build > Realtime Database > "Créer une base
-      de données" > démarre en mode TEST (accès ouvert, suffisant
-      pour un usage entre potes ; resserre les règles si besoin).
-   3) Project settings > tes applis > "</> Web" > copie la config
-      ci-dessous et colle-la à la place de celle-ci.
-   ================================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyAvb_btoCsNPbJi5MRe07IQXnbbPwp9ArU",
   authDomain: "gymplanning-be7bb.firebaseapp.com",
@@ -379,9 +371,9 @@ const deviceId = getDeviceId();
 
 let editMode = false;
 let activeDay = null;
-let plan = null; // { days: [{id,name,exercises:[{id,name,sets,reps,media}]}] }
-let progress = {}; // { exerciseId: true }
-let expanded = new Set(); // exercise ids with the media panel open
+let plan = null; 
+let progress = {}; 
+let expanded = new Set(); 
 
 const today = new Date().toISOString().slice(0,10);
 
@@ -410,8 +402,6 @@ function defaultPlan(){
 }
 
 function loadPlan(){
-  // Résout une fois la première valeur reçue, puis continue d'écouter
-  // les changements en direct pour que tous les appareils restent à jour.
   return new Promise((resolve)=>{
     if(!isConfigured){
       plan = defaultPlan();
@@ -420,16 +410,28 @@ function loadPlan(){
     }
     let first = true;
     db.ref('plan').on('value', (snapshot)=>{
-      const val = snapshot.val();
+      let val = snapshot.val();
       if(val){
+        // --- CORRECTION DU BUG FIREBASE ---
+        // Firebase supprime automatiquement les tableaux vides. 
+        // On s'assure donc que "days" et "exercises" soient recréés s'ils sont manquants.
+        if (!val.days) {
+            val.days = [];
+        }
+        val.days.forEach(day => {
+            if (!day.exercises) {
+                day.exercises = [];
+            }
+        });
+        // -----------------------------------
         plan = val;
       }else if(first){
         plan = defaultPlan();
         savePlan();
       }
+      
       if(first){ first = false; resolve(); }
       else{
-        // mise à jour venue d'un autre appareil : on garde le jour actif si possible
         if(!plan.days.find(d=>d.id===activeDay)){
           activeDay = plan.days.length ? plan.days[0].id : null;
         }
@@ -498,12 +500,17 @@ function renderDays(){
 function renderMain(){
   const main = document.getElementById('main');
   main.innerHTML = "";
-  if(!plan.days.length){
+  if(!plan.days || !plan.days.length){
     main.innerHTML = '<p class="empty">Aucun jour pour l’instant. Passe en mode Modifier pour en créer un.</p>';
     return;
   }
   const day = plan.days.find(d=>d.id===activeDay) || plan.days[0];
   activeDay = day.id;
+
+  // Sécurité additionnelle au cas où
+  if (!day.exercises) {
+      day.exercises = [];
+  }
 
   const dh = document.createElement('div');
   dh.className = 'day-header';
@@ -691,6 +698,7 @@ document.getElementById('newDayBtn').onclick = async ()=>{
   const name = input.value.trim();
   if(!name) return;
   const newDay = {id:uid(), name, exercises:[]};
+  if(!plan.days) plan.days = [];
   plan.days.push(newDay);
   activeDay = newDay.id;
   await savePlan();
